@@ -3,10 +3,11 @@ import os
 import numpy as np
 from glob import glob
 from osgeo import gdal, gdalconst
+import cv2
 
 
 class GeoDataLoader(data.Dataset):
-    def __init__(self, x_data=None, y_data=None, size=None,
+    def __init__(self, x_data=None, y_data=None, resize=None,
                  mean=None, std=None, shuffle=True):
         if y_data is None:
             self.iamsource = False
@@ -16,7 +17,7 @@ class GeoDataLoader(data.Dataset):
         if y_data is not None:
             self.source_labels = y_data
         self.src_indexes = []
-        self.resize_size = size
+        self.resize = resize
         self.shuffle = shuffle
         self.dataset_size = None
         self.mean = 127.5 if mean is None else mean
@@ -55,17 +56,17 @@ class GeoDataLoader(data.Dataset):
         assert image.shape[0] == 4, "Wrong input image band number"
         image = np.asarray(image, np.float)
         image = image.transpose((1, 2, 0))
+        image = cv2.resize(image, dsize=self.resize, interpolation=cv2.INTER_CUBIC)
         image -= self.mean
         image /= self.std
         image = image.transpose((2, 0, 1))
         image = image[:3, :, :]
-        if self.iamsource:
-            sample_name = os.path.split(self.source_data[index])[1]
-            if not os.path.exists(os.path.join(self.source_labels, sample_name)):
-                print(f'Corresponding label for {sample_name} was not found.')
-            label_ds = gdal.Open(os.path.join(self.source_labels, sample_name), gdalconst.GA_ReadOnly)
-            label = label_ds.ReadAsArray()
-            label = np.asarray(label, np.uint8)
-            return image.copy(), label.copy(), image_georef
-        else:
-            return image.copy(), image_georef
+
+        sample_name = os.path.split(self.source_data[index])[1]
+        if not os.path.exists(os.path.join(self.source_labels, sample_name)):
+            print(f'Corresponding label for {sample_name} was not found.')
+        label_ds = gdal.Open(os.path.join(self.source_labels, sample_name), gdalconst.GA_ReadOnly)
+        label = label_ds.ReadAsArray()
+        label = np.asarray(label, np.uint8)
+        label = cv2.resize(label, dsize=self.resize, interpolation=cv2.INTER_NEAREST)
+        return image.copy(), label.copy(), image_georef
